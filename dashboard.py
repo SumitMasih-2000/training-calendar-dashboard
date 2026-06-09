@@ -16,7 +16,6 @@ st.set_page_config(
 )
 
 # 2. Executive Blue Theme Color Palette Map
-# Designed using high-contrast shades of Professional Blue to keep a cohesive corporate aesthetic
 BLUE_PALETTE = {
     "Advanced Excel": "#1E3A8A",      # Deep Navy Blue
     "Coding": "#3B82F6",              # Electric Royal Blue
@@ -25,19 +24,15 @@ BLUE_PALETTE = {
     "Fallback": "#2563EB"             # Classic Blue Accent
 }
 
-# 3. Resilient Advanced Date Parser (Ensures NO rows are dropped due to blank cells)
+# 3. Resilient Advanced Date Parser
 def parse_resilient_date(date_str, fallback_day=1, default_month=5, default_year=2024):
     if pd.isna(date_str) or str(date_str).strip() == "" or str(date_str).lower().strip() == "nan":
-        # Critical Fallback: If closing date is missing, auto-extend to end of month so it stays visible
         return datetime(default_year, default_month, 31)
         
     clean_str = str(date_str).lower().strip()
-    
-    # Extract only numbers from strings like "1st", "15th", "26th"
     day_digits = re.search(r'\d+', clean_str)
     day = int(day_digits.group()) if day_digits else fallback_day
     
-    # Map months to numbers safely
     month = default_month
     if "april" in clean_str: month = 4
     elif "may" in clean_str: month = 5
@@ -45,10 +40,9 @@ def parse_resilient_date(date_str, fallback_day=1, default_month=5, default_year
     
     return datetime(default_year, month, day)
 
-# 4. Master Data Ingestion Pipeline (Reads directly from Excel)
+# 4. Master Data Ingestion Pipeline
 @st.cache_data
 def process_master_dataset():
-    # Looks for both raw Excel or pre-extracted formats to maximize uptime compatibility
     target_files = ["Sample _data.xlsx", "Sample _data.xlsx - Dataset.csv"]
     df = None
     
@@ -57,7 +51,6 @@ def process_master_dataset():
             if f_name.endswith('.csv'):
                 df = pd.read_csv(f_name)
             else:
-                # Target the exact data sheet named 'Dataset' in your uploaded file
                 df = pd.read_excel(f_name, sheet_name="Dataset")
             break
         except:
@@ -67,22 +60,18 @@ def process_master_dataset():
         st.error("❌ Data Engine Failure: Ensure your 'Sample _data.xlsx' spreadsheet is saved right beside your script file.")
         st.stop()
         
-    # Standardize column headers and text values by stripping spaces
     df.columns = df.columns.str.strip()
     for col in df.select_dtypes(include='object').columns:
         df[col] = df[col].fillna("Not Assigned").astype(str).str.strip()
         
-    # Clean and parse metrics securely
     df['No of students'] = pd.to_numeric(df['No of students'], errors='coerce').fillna(0).astype(int)
     df['Delivery hrs'] = pd.to_numeric(df['Delivery hrs'], errors='coerce').fillna(0).astype(int)
     df['No. of batches'] = pd.to_numeric(df['No. of batches'], errors='coerce').fillna(0).astype(int)
     df['Trainers required'] = pd.to_numeric(df['Trainers required'], errors='coerce').fillna(0).astype(int)
 
-    # Convert inconsistent string dates to standardized timestamps
     df['Start_Parsed'] = df['Start date'].apply(lambda x: parse_resilient_date(x, fallback_day=1))
     df['End_Parsed'] = df['Closing date'].apply(lambda x: parse_resilient_date(x, fallback_day=31))
     
-    # Boundary guard: prevent end dates from falling chronologically before start dates
     df.loc[df['End_Parsed'] < df['Start_Parsed'], 'End_Parsed'] = df['Start_Parsed'] + pd.Timedelta(days=7)
     
     return df
@@ -93,8 +82,9 @@ df = process_master_dataset()
 st.sidebar.title("💠 Operations Matrix Filters")
 st.sidebar.markdown("Refine your dashboard data views globally:")
 
-universities = sorted(df['University'].unique())
-selected_uni = st.sidebar.multiselect("🏫 Focus Institutions", universities, default=universities)
+# CHANGE: Converted University filter into an easy-to-operate drop-down list
+universities_options = ["All Universities"] + sorted(list(df['University'].unique()))
+selected_uni = st.sidebar.selectbox("🏫 Focus Institution", universities_options, index=0)
 
 papers = sorted(df['Courses/ Name of the paper'].unique())
 selected_papers = st.sidebar.multiselect("📚 Course Modules", papers, default=papers)
@@ -102,9 +92,14 @@ selected_papers = st.sidebar.multiselect("📚 Course Modules", papers, default=
 modes = sorted(df['Delivery mode'].unique())
 selected_modes = st.sidebar.multiselect("💻 Modality Format", modes, default=modes)
 
-# Execute global structural query filter across all views
+# Execute global structural query filter with the dropdown choice accounted for
+if selected_uni == "All Universities":
+    uni_mask = df['University'].isin(df['University'].unique())
+else:
+    uni_mask = df['University'] == selected_uni
+
 filtered_df = df[
-    (df['University'].isin(selected_uni)) &
+    uni_mask &
     (df['Courses/ Name of the paper'].isin(selected_papers)) &
     (df['Delivery mode'].isin(selected_modes))
 ]
@@ -113,7 +108,6 @@ filtered_df = df[
 st.title("💠 Blue-Theme Enterprise Training Management Hub")
 st.markdown("A premium, resilient executive scheduler offering automated date repairs, trainer booking conflict validation, and export tooling.")
 
-# KPIs structured natively for optimal dashboard presentation
 m1, m2, m3, m4 = st.columns(4)
 with m1:
     st.metric(label="📦 Active Cohort Batches", value=int(filtered_df["No. of batches"].sum()))
@@ -126,7 +120,7 @@ with m4:
 
 st.markdown("---")
 
-# 7. Advanced Tabular Workspace (Core App Components)
+# 7. Advanced Tabular Workspace
 tab_calendar, tab_analytics, tab_conflicts, tab_export = st.tabs([
     "📅 Blue Calendar Grid Matrix", 
     "📊 Advanced Visual Analytics", 
@@ -135,7 +129,6 @@ tab_calendar, tab_analytics, tab_conflicts, tab_export = st.tabs([
 ])
 
 with tab_calendar:
-    # Build events JSON configuration dynamically
     calendar_events = []
     for idx, row in filtered_df.iterrows():
         course_title = row['Courses/ Name of the paper']
@@ -152,7 +145,7 @@ with tab_calendar:
             "extendedProps": {
                 "uni": row['University'], "prog": row['Program'], "sem": row['Semester'],
                 "trainer": row['Mapped Trainers'], "hrs": row['Delivery hrs'], "students": row['No of students'],
-                "style": row['Weekly/ Blocked']
+                "style": row['Weekly/ Blocked'], "mode": row['Delivery mode'] # Fixed missing item
             }
         })
 
@@ -193,7 +186,6 @@ with tab_analytics:
         chart_col1, chart_col2 = st.columns(2)
         
         with chart_col1:
-            # Blue themed Pie/Donut Chart showing Student Volume Distribution
             fig_pie = px.pie(
                 filtered_df, 
                 values="No of students", 
@@ -207,7 +199,6 @@ with tab_analytics:
             st.plotly_chart(fig_pie, use_container_width=True)
             
         with chart_col2:
-            # Blue themed Stacked Bar Chart for University Delivery Breakdown
             fig_bar = px.bar(
                 filtered_df,
                 x="University",
@@ -220,7 +211,6 @@ with tab_analytics:
             fig_bar.update_layout(margin=dict(t=40, b=10, l=10, r=10), xaxis_tickangle=-20)
             st.plotly_chart(fig_bar, use_container_width=True)
             
-        # Linear Timeline Gantt view embedded at bottom of analytics for clean visibility
         st.markdown("<br><b>🏭 Operational Resource Allocation Roadmap View</b>", unsafe_with_html=True)
         fig_gantt = px.timeline(
             filtered_df, 
@@ -239,14 +229,14 @@ with tab_analytics:
 
 with tab_conflicts:
     st.subheader("⚠️ Automated Trainer Schedule Overlap Detector")
-    st.markdown("This tool cross-references dates to flags instances where a single trainer is booked for multiple parallel batches simultaneously.")
+    st.markdown("This tool cross-references dates to flag instances where a single trainer is booked for multiple parallel batches simultaneously.")
     
     conflicts_found = False
     trainers_list = filtered_df['Mapped Trainers'].unique()
     
     for trainer in trainers_list:
         if trainer == "Not Assigned" or "," in trainer or "and" in trainer.lower():
-            continue  # Skip unassigned slots or shared team delivery entries
+            continue  
             
         trainer_df = filtered_df[filtered_df['Mapped Trainers'] == trainer].sort_values(by='Start_Parsed')
         if len(trainer_df) > 1:
@@ -254,4 +244,33 @@ with tab_conflicts:
                 current_row = trainer_df.iloc[i]
                 next_row = trainer_df.iloc[i+1]
                 
-                # Check for calendar
+                # Check for calendar overlap overlaps
+                if current_row['End_Parsed'] >= next_row['Start_Parsed']:
+                    conflicts_found = True
+                    st.error(f"⚠️ **Schedule Overlap Detected for {trainer}:**")
+                    st.write(f"- **Batch 1:** {current_row['University']} - {current_row['Courses/ Name of the paper']} ({current_row['Start_Parsed'].strftime('%d %b')} to {current_row['End_Parsed'].strftime('%d %b')})")
+                    st.write(f"- **Batch 2:** {next_row['University']} - {next_row['Courses/ Name of the paper']} ({next_row['Start_Parsed'].strftime('%d %b')} to {next_row['End_Parsed'].strftime('%d %b')})")
+                    st.divider()
+                    
+    if not conflicts_found:
+        st.success("✅ Clean Slate: No trainer scheduling overlaps found with current selection settings.")
+
+with tab_export:
+    st.subheader("📥 Data Export Toolkit")
+    st.markdown("Download your currently filtered dataset as a standard CSV archive file.")
+    
+    if not filtered_df.empty:
+        csv_buffer = io.StringIO()
+        # Drop parsed structural columns for clean export file
+        export_df = filtered_df.drop(columns=['Start_Parsed', 'End_Parsed'], errors='ignore')
+        export_df.to_csv(csv_buffer, index=False)
+        csv_bytes = csv_buffer.getvalue().encode('utf-8')
+        
+        st.download_button(
+            label="📥 Download Filtered Data Matrix as CSV",
+            data=csv_bytes,
+            file_name=f"training_schedule_{datetime.now().strftime('%Y%m%d')}.csv",
+            mime="text/csv"
+        )
+    else:
+        st.info("No data available to generate export file.")
