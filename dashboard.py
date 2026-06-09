@@ -82,7 +82,7 @@ df = process_master_dataset()
 st.sidebar.title("💠 Operations Matrix Filters")
 st.sidebar.markdown("Refine your dashboard data views globally:")
 
-# CHANGE: Converted University filter into an easy-to-operate drop-down list
+# Clean Dropdown Menu Implementation
 universities_options = ["All Universities"] + sorted(list(df['University'].unique()))
 selected_uni = st.sidebar.selectbox("🏫 Focus Institution", universities_options, index=0)
 
@@ -92,7 +92,7 @@ selected_papers = st.sidebar.multiselect("📚 Course Modules", papers, default=
 modes = sorted(df['Delivery mode'].unique())
 selected_modes = st.sidebar.multiselect("💻 Modality Format", modes, default=modes)
 
-# Execute global structural query filter with the dropdown choice accounted for
+# Global Data Query Filter logic
 if selected_uni == "All Universities":
     uni_mask = df['University'].isin(df['University'].unique())
 else:
@@ -145,12 +145,15 @@ with tab_calendar:
             "extendedProps": {
                 "uni": row['University'], "prog": row['Program'], "sem": row['Semester'],
                 "trainer": row['Mapped Trainers'], "hrs": row['Delivery hrs'], "students": row['No of students'],
-                "style": row['Weekly/ Blocked'], "mode": row['Delivery mode'] # Fixed missing item
+                "style": row['Weekly/ Blocked'], "mode": row['Delivery mode']
             }
         })
 
     cal_col, side_inspect = st.columns([2.3, 1])
     with cal_col:
+        # FIX: The key incorporates the selected values so that changing filters forces a full view update
+        dynamic_cal_key = f"scheduler_{selected_uni.replace(' ', '_')}_{len(filtered_df)}"
+        
         cal_ui = calendar(
             events=calendar_events,
             options={
@@ -160,7 +163,7 @@ with tab_calendar:
                 "selectable": True,
                 "height": 650
             },
-            key="blue_theme_scheduler"
+            key=dynamic_cal_key
         )
         
     with side_inspect:
@@ -244,7 +247,6 @@ with tab_conflicts:
                 current_row = trainer_df.iloc[i]
                 next_row = trainer_df.iloc[i+1]
                 
-                # Check for calendar overlap overlaps
                 if current_row['End_Parsed'] >= next_row['Start_Parsed']:
                     conflicts_found = True
                     st.error(f"⚠️ **Schedule Overlap Detected for {trainer}:**")
@@ -261,7 +263,6 @@ with tab_export:
     
     if not filtered_df.empty:
         csv_buffer = io.StringIO()
-        # Drop parsed structural columns for clean export file
         export_df = filtered_df.drop(columns=['Start_Parsed', 'End_Parsed'], errors='ignore')
         export_df.to_csv(csv_buffer, index=False)
         csv_bytes = csv_buffer.getvalue().encode('utf-8')
